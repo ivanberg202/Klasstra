@@ -1,41 +1,81 @@
+# Klasstra
 
+**Klasstra** is a web application designed to streamline communication and collaboration in classroom communities. It provides a central platform for teachers, parents, and potentially students to share announcements, updates, and more. While initially built for the teachers in my son's class, Klasstra is designed to be flexible and scalable, accommodating a wide range of educational use cases in the future.
 
+## Features
 
-20241202 swager login issues
+- **Announcements:** Teachers can easily post updates and announcements.
+- **Communication:** A simplified channel for teachers to communicate with parents.
+- **Scalability:** Built with the potential to expand into broader educational tools.
 
-Swagger Issue with client_id and client_secret:
-Ensured OAuth2PasswordRequestForm is used in the /token endpoint.
-Swagger now understands the password grant flow.
+## Motivation
 
+Klasstra was born out of a personal need to bridge communication gaps in my son's classroom. Currently, teachers rely on paper and email for announcements, which can be inefficient and scattered. This project aims to centralize these communications and make them more accessible and organized.
 
+## Tech Stack
 
-For issues with libraries:
+- **Backend:** [FastAPI](https://fastapi.tiangolo.com/) - A modern, fast (high-performance) web framework for Python.
+- **Database:** PostgreSQL - A powerful, open-source object-relational database system.
+- **Frontend:** Basic HTML and CSS (No external frameworks like Bootstrap).
+- **Templating:** Jinja2 for creating reusable and dynamic components.
 
-20241126 VS Code environment setup (Problem: Library not loaded: @rpath/libssl.3.dylib)
-Solution:
-Set Compiler Flags Ensure the required environment variables for compilers are set:
-export LDFLAGS="-L/usr/local/opt/libpq/lib"
-export CPPFLAGS="-I/usr/local/opt/libpq/include"
+## Installation
 
-Set PKG_CONFIG_PATH Update the PKG_CONFIG_PATH for tools that use pkg-config:
-export PKG_CONFIG_PATH="/usr/local/opt/libpq/lib/pkgconfig"
+Follow these steps to set up Klasstra on your local machine:
 
-Update DYLD_LIBRARY_PATH Add libpq to the DYLD_LIBRARY_PATH:
-export DYLD_LIBRARY_PATH="/usr/local/opt/libpq/lib:$DYLD_LIBRARY_PATH"
-
-Below solution stopped working before fully resolving the imports.
-- I already spent 1,5 days figuring out the same issue on pycharm. Now it took me just 2 hours. Below seems to be the solution:
-
-Step 3: Set DYLD_LIBRARY_PATH
-The dynamic linker on macOS uses DYLD_LIBRARY_PATH to find libraries. Update this path to include OpenSSL's library location.
-
-Temporarily set it for the current session:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/klasstra.git
+   cd klasstra
+Set up a virtual environment:
 
 bash
-SOLUTION:
-export DYLD_LIBRARY_PATH=$(brew --prefix openssl)/lib:$DYLD_LIBRARY_PATH
+Copy code
+python3 -m venv env
+source env/bin/activate  # For Windows: .\env\Scripts\activate
+Install dependencies:
 
-To make this permanent, add it to your shell configuration file:
+bash
+Copy code
+pip install -r requirements.txt
+Configure the database:
 
-bash (this didn't work)
-echo 'export DYLD_LIBRARY_PATH=$(brew --prefix openssl)/lib:$DYLD_LIBRARY_PATH' >> ~/.zshrc
+Ensure you have PostgreSQL installed.
+Create a database named klasstra_db.
+Update the DATABASE_URL in database.py to match your setup.
+Run database migrations:
+
+bash
+Copy code
+alembic upgrade head
+Start the FastAPI server:
+
+bash
+Copy code
+uvicorn main:app --reload
+Access the app: Open your browser and go to http://localhost:8000.
+
+Usage
+Current Capabilities:
+Create, Read, Update, and Delete (CRUD) Todos for testing functionality.
+Post and view announcements.
+Future features under exploration: Scheduling, event management, and parent-teacher interactions.
+Planned Enhancements:
+Role-based access (teachers, parents, admin).
+Multilingual support for international users (German, French, and English).
+Improved frontend design with modular components.
+Lessons Learned
+This project is my first un-guided coding experience after learning Python and FastAPI through courses and personal practice. It's been a rewarding challenge to move from structured tutorials to self-reliant development.
+
+Acknowledgments
+Angela Yu's Udemy Course: A fantastic resource that kickstarted my Python journey.
+ChatGPT: My ever-patient coding assistant.
+Teachers everywhere for inspiring this app with their dedication.
+License
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+Contact
+Feel free to reach out with feedback, questions, or collaboration ideas:
+
+Author: Ivan Berg
+Klasstra – Connecting classrooms, one update at a time!
