@@ -27,43 +27,39 @@ Follow these steps to set up Klasstra on your local machine:
    ```bash
    git clone https://github.com/yourusername/klasstra.git
    cd klasstra
-Set up a virtual environment:
 
-bash
-Copy code
+
+2. Set up a virtual environment:
 python3 -m venv env
 source env/bin/activate  # For Windows: .\env\Scripts\activate
-Install dependencies:
 
-bash
-Copy code
+3. Install dependencies:
 pip install -r requirements.txt
-Configure the database:
 
+4. Configure the database:
 Ensure you have PostgreSQL installed.
 Create a database named klasstra_db.
 Update the DATABASE_URL in database.py to match your setup.
-Run database migrations:
 
-bash
-Copy code
+5. Run database migrations:
 alembic upgrade head
-Start the FastAPI server:
 
-bash
-Copy code
+6. Start the FastAPI server:
 uvicorn main:app --reload
 Access the app: Open your browser and go to http://localhost:8000.
 
 Usage
+
 Current Capabilities:
 Create, Read, Update, and Delete (CRUD) Todos for testing functionality.
 Post and view announcements.
 Future features under exploration: Scheduling, event management, and parent-teacher interactions.
+
 Planned Enhancements:
 Role-based access (teachers, parents, admin).
 Multilingual support for international users (German, French, and English).
 Improved frontend design with modular components.
+
 Lessons Learned
 This project is my first un-guided coding experience after learning Python and FastAPI through courses and personal practice. It's been a rewarding challenge to move from structured tutorials to self-reliant development.
 
@@ -71,11 +67,12 @@ Acknowledgments
 Angela Yu's Udemy Course: A fantastic resource that kickstarted my Python journey.
 ChatGPT: My ever-patient coding assistant.
 Teachers everywhere for inspiring this app with their dedication.
+
 License
 This project is licensed under the MIT License. See the LICENSE file for details.
 
 Contact
-Feel free to reach out with feedback, questions, or collaboration ideas:
+Linkedin: https://www.linkedin.com/in/ivkoberg/
 
 Author: Ivan Berg
 Klasstra – Connecting classrooms, one update at a time!

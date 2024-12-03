@@ -1,14 +1,3 @@
-
-
-
-20241202 swager login issues
-
-Swagger Issue with client_id and client_secret:
-Ensured OAuth2PasswordRequestForm is used in the /token endpoint.
-Swagger now understands the password grant flow.
-
-
-
 For issues with libraries:
 
 20241126 VS Code environment setup (Problem: Library not loaded: @rpath/libssl.3.dylib)
