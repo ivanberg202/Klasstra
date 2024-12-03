@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, UserProfile
-from app.schemas.user import UserCreate, UserProfileCreate
+from app.schemas.users import UserCreate, UserProfileCreate
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
@@ -40,7 +40,13 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
+    
+    # Ensure 'sub' is a string
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
+    
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 
 # Function to authenticate user credentials
 def authenticate_user(username: str, password: str, db: Session) -> User:
@@ -85,10 +91,19 @@ def get_user_from_token(db: Session, token: str) -> User:
 
 # Dependency to get the current authenticated user
 def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
-    user = get_user_from_token(db, token)
-    if not user:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        user_role = payload.get("role")
+        if user_id is None or user_role is None:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        if user:
+            user.role = user_role  # Assign the role from the token to the user object
+        return user
+    except JWTError as e:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return user
+
 
 # Role-based access control decorator
 def role_required(required_role: str):
@@ -104,8 +119,7 @@ def role_required(required_role: str):
 # Endpoint to create a user and their profile
 @router.post("/create_user_with_profile")
 def create_user_with_profile(
-    user_data: UserCreate, 
-    profile_data: UserProfileCreate, 
+    user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
     # Check if the user already exists
@@ -128,32 +142,17 @@ def create_user_with_profile(
     db.commit()
     db.refresh(new_user)
 
-    # Create the user profile
-    user_profile = UserProfile(
-        user_id=new_user.id,
-        first_name=profile_data.first_name,
-        last_name=profile_data.last_name,
-        phone_number=profile_data.phone_number,
-        address=profile_data.address,
-        hobbies=profile_data.hobbies,
-        preferred_contact_method=profile_data.preferred_contact_method,
-    )
-    db.add(user_profile)
-    db.commit()
-    db.refresh(user_profile)
+    # Create the user profile if provided
+    if user_data.profile:
+        user_profile = UserProfile(
+            user_id=new_user.id,
+            **user_data.profile.dict()  # Unpack profile details
+        )
+        db.add(user_profile)
+        db.commit()
+        db.refresh(user_profile)
 
     return {
         "user": new_user,
         "profile": user_profile
-    }
-
-# Endpoint to get user details by username
-@router.get("/users/{username}")
-def get_user_with_profile(username: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {
-        "user": user,
-        "profile": user.profile
     }

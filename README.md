@@ -45,10 +45,10 @@ Update the DATABASE_URL in database.py to match your setup.
 alembic upgrade head
 
 6. Start the FastAPI server:
-uvicorn main:app --reload
+uvicorn app.main:app --reload
 Access the app: Open your browser and go to http://localhost:8000.
 
-Usage
+## Usage
 
 Current Capabilities:
 Create, Read, Update, and Delete (CRUD) Todos for testing functionality.
@@ -63,7 +63,7 @@ Improved frontend design with modular components.
 Lessons Learned
 This project is my first un-guided coding experience after learning Python and FastAPI through courses and personal practice. It's been a rewarding challenge to move from structured tutorials to self-reliant development.
 
-Acknowledgments
+## Acknowledgments
 Angela Yu's Udemy Course: A fantastic resource that kickstarted my Python journey.
 ChatGPT: My ever-patient coding assistant.
 Teachers everywhere for inspiring this app with their dedication.

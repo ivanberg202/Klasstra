@@ -4,12 +4,15 @@ from typing import Optional
 
 class AnnouncementBase(BaseModel):
     title: str
-    content: str
-    language: str
-    target_audience: str  # e.g., 'parents', 'teachers'
+    content_en: str = None  # Optional for announcements in non-English languages
+    content_de: str = None
+    content_fr: str = None
+    original_language: str = "en"
+    target_audience: str
+    class_id: int
 
 class AnnouncementCreate(AnnouncementBase):
-    class_id: int
+    pass
 
 class AnnouncementResponse(AnnouncementBase):
     id: int

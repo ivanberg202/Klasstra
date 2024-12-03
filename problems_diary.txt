@@ -1,3 +1,7 @@
+Include into get_user also the missing data points from related user_profiles table. 
+Allow update all the user details and related user_profiles details in update_user endpoint.
+
+
 For issues with libraries:
 
 20241126 VS Code environment setup (Problem: Library not loaded: @rpath/libssl.3.dylib)
