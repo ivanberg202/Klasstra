@@ -12,8 +12,16 @@ class UserProfileBase(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class UserProfileCreate(UserProfileBase):
-    pass  # No additional fields required for creation
+class UserProfileCreate(BaseModel):
+    first_name: Optional[str]
+    last_name: Optional[str]
+    phone_number: Optional[str]
+    address: Optional[str]
+    hobbies: Optional[str]
+    preferred_contact_method: Optional[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UserProfileResponse(BaseModel):
     first_name: Optional[str]
@@ -32,9 +40,13 @@ class UserBase(BaseModel):
     role: str
     language: Optional[str] = "en"
 
-class UserCreate(UserBase):
-    password: str  # Password is required for user creation
-    profile: Optional[UserProfileCreate]  # Include profile creation details
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+    role: str
+    language: Optional[str] = "en"
+    profile: Optional[UserProfileCreate]  # Add nested profile schema
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr]

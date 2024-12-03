@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, UserProfile
-from app.schemas.users import UserCreate, UserProfileCreate
-from app.schemas.auth import UserCreate, UserResponse
+from app.schemas.users import UserCreate, UserProfileResponse
+from app.schemas.auth import UserResponse
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
@@ -12,8 +12,6 @@ import os
 from dotenv import load_dotenv
 import secrets
 from app.utils import send_email  # A utility function for sending emails
-
-
 
 router = APIRouter()
 
@@ -58,34 +56,40 @@ def authenticate_user(username: str, password: str, db: Session) -> User:
         return None
     return user
 
+
 @router.post("/auth/register", response_model=UserResponse)
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    # Check if the username or email already exists
-    existing_user = (
-        db.query(User)
-        .filter((User.username == user_data.username) | (User.email == user_data.email))
-        .first()
-    )
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A user with this username or email already exists."
-        )
-    
-    # Hash the password and create the user
-    hashed_password = hash_password(user_data.password)
+    # Ensure this line is present for schema validation
     new_user = User(
         username=user_data.username,
         email=user_data.email,
-        password=hashed_password,
+        password=hash_password(user_data.password),
         role=user_data.role,
         language=user_data.language,
     )
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    return new_user
+    if user_data.profile:
+        user_profile = UserProfile(
+            user_id=new_user.id,
+            **user_data.profile.dict()  # Ensure this references the nested profile schema
+        )
+        db.add(user_profile)
+        db.commit()
+        db.refresh(user_profile)
+
+    return UserResponse(
+        id=new_user.id,
+        username=new_user.username,
+        email=new_user.email,
+        role=new_user.role,
+        language=new_user.language,
+        profile=user_profile and UserProfileResponse.from_orm(user_profile),
+    )
+
 
 
 @router.post("/auth/forgot-password")
@@ -112,26 +116,28 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
 
 
 @router.post("/auth/reset-password")
-def reset_password(user_id: int, token: str, new_password: str, db: Session = Depends(get_db)):
-    # Validate the token
-    if reset_tokens.get(user_id) != token:
+def reset_password(email: str, token: str, new_password: str, db: Session = Depends(get_db)):
+    # Fetch the user by email
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    
+    # Validate the reset token
+    if reset_tokens.get(user.id) != token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token."
         )
 
     # Update the user's password
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-    
     user.password = hash_password(new_password)
     db.commit()
 
     # Remove the token after successful reset
-    del reset_tokens[user_id]
+    del reset_tokens[user.id]
 
     return {"message": "Password updated successfully."}
+
 
 
 
@@ -196,44 +202,3 @@ def role_required(required_role: str):
             )
         return user
     return role_checker
-
-# Endpoint to create a user and their profile
-@router.post("/create_user_with_profile")
-def create_user_with_profile(
-    user_data: UserCreate,
-    db: Session = Depends(get_db)
-):
-    # Check if the user already exists
-    existing_user = db.query(User).filter(User.username == user_data.username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Hash the password
-    hashed_password = hash_password(user_data.password)
-
-    # Create the user
-    new_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        password=hashed_password,
-        role=user_data.role,
-        language=user_data.language,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    # Create the user profile if provided
-    if user_data.profile:
-        user_profile = UserProfile(
-            user_id=new_user.id,
-            **user_data.profile.dict()  # Unpack profile details
-        )
-        db.add(user_profile)
-        db.commit()
-        db.refresh(user_profile)
-
-    return {
-        "user": new_user,
-        "profile": user_profile
-    }

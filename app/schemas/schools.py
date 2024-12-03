@@ -1,12 +1,12 @@
 from pydantic import BaseModel, ConfigDict
 
 class SchoolBase(BaseModel):
-    name: str  # Name of the school
+    name: str
 
 class SchoolCreate(SchoolBase):
-    pass  # No additional fields needed for creation
+    pass
 
 class SchoolResponse(SchoolBase):
-    id: int  # Include the ID for responses
+    id: int
 
-    model_config = ConfigDict(from_attributes=True)  # Replaces orm_mode
+    model_config = ConfigDict(from_attributes=True)

@@ -35,7 +35,6 @@ def get_user(username: str, db: Session = Depends(get_db), user: User = Depends(
 
 
 
-
 @router.put("/users/{username}/update", response_model=UserResponse)
 def update_user(username: str, user_update: UserUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     # Allow access only to admin or the user themselves
@@ -50,16 +49,22 @@ def update_user(username: str, user_update: UserUpdate, db: Session = Depends(ge
     for key, value in user_update.dict(exclude_unset=True).items():
         if key in ["email", "role", "language"]:
             setattr(db_user, key, value)
-    
+
+    # Handle profile creation or update
+    if not db_user.profile:
+        db_user.profile = UserProfile(user_id=db_user.id)  # Create a new profile if none exists
+
     # Update UserProfile details
-    if db_user.profile:
-        for key, value in user_update.dict(exclude_unset=True).items():
-            if key in ["first_name", "last_name", "phone_number", "address", "hobbies", "preferred_contact_method"]:
-                setattr(db_user.profile, key, value)
-    
+    for key, value in user_update.dict(exclude_unset=True).items():
+        if key in ["first_name", "last_name", "phone_number", "address", "hobbies", "preferred_contact_method"]:
+            setattr(db_user.profile, key, value)
+
+    db.add(db_user.profile)  # Explicitly add the profile to the session
     db.commit()
     db.refresh(db_user)
     return db_user
+
+
 
 
 

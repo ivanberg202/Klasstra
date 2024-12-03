@@ -5,9 +5,9 @@ class ClassBase(BaseModel):
     school_id: int
 
 class ClassCreate(ClassBase):
-    pass  # No additional fields for creation
+    pass
 
 class ClassResponse(ClassBase):
-    id: int  # Include the ID for responses
+    id: int
 
-    model_config = ConfigDict(from_attributes=True)  # Replaces orm_mode
+    model_config = ConfigDict(from_attributes=True)

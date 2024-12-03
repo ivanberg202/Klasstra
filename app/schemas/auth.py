@@ -1,11 +1,11 @@
 from pydantic import BaseModel, EmailStr
 
-class UserCreate(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
-    role: str  # parent, teacher, admin
-    language: str = "en"
+# class UserCreate(BaseModel):
+#     username: str
+#     email: EmailStr
+#     password: str
+#     role: str  # parent, teacher, admin
+#     language: str = "en"
 
 
 class UserResponse(BaseModel):
