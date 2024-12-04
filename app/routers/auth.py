@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, UserProfile
-from app.schemas.users import UserCreate, UserProfileResponse
-from app.schemas.auth import UserResponse
+from app.models import User, UserProfile, School, Class, Student, ParentStudent
+from app.schemas.users import UserCreate, UserProfileResponse, UserResponse, StudentCreate
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
@@ -12,6 +11,8 @@ import os
 from dotenv import load_dotenv
 import secrets
 from app.utils import send_email  # A utility function for sending emails
+from sqlalchemy.orm import joinedload
+
 
 router = APIRouter()
 
@@ -59,60 +60,96 @@ def authenticate_user(username: str, password: str, db: Session) -> User:
 
 @router.post("/auth/register", response_model=UserResponse)
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    # Ensure this line is present for schema validation
+    # Validate school_id
+    if user_data.profile and user_data.profile.school_id:
+        school = db.query(School).filter(School.id == user_data.profile.school_id).first()
+        if not school:
+            raise HTTPException(status_code=400, detail="Invalid school_id")
+
+    # Validate class_id
+    if user_data.profile and user_data.profile.class_id:
+        class_instance = db.query(Class).filter(Class.id == user_data.profile.class_id).first()
+        if not class_instance:
+            raise HTTPException(status_code=400, detail="Invalid class_id")
+
+    # Check for existing user
+    existing_user = (
+        db.query(User)
+        .filter((User.username == user_data.username) | (User.email == user_data.email))
+        .first()
+    )
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="A user with this username or email already exists."
+        )
+
+    # Create the new user
+    hashed_password = hash_password(user_data.password)
     new_user = User(
         username=user_data.username,
         email=user_data.email,
-        password=hash_password(user_data.password),
+        password=hashed_password,
         role=user_data.role,
         language=user_data.language,
     )
-
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
+    # Create the profile
+    profile = None
     if user_data.profile:
-        user_profile = UserProfile(
-            user_id=new_user.id,
-            **user_data.profile.dict()  # Ensure this references the nested profile schema
-        )
-        db.add(user_profile)
+        profile_data = user_data.profile.dict(exclude_unset=True)
+        students_data = profile_data.pop('students', None)
+
+        profile = UserProfile(user_id=new_user.id, **profile_data)
+        db.add(profile)
         db.commit()
-        db.refresh(user_profile)
 
-    return UserResponse(
-        id=new_user.id,
-        username=new_user.username,
-        email=new_user.email,
-        role=new_user.role,
-        language=new_user.language,
-        profile=user_profile and UserProfileResponse.from_orm(user_profile),
+        # Handle students
+        if students_data:
+            for student_info in students_data:
+                # Check for duplicate student in the same class
+                existing_student = db.query(Student).filter(
+                    Student.first_name == student_info['first_name'],
+                    Student.last_name == student_info['last_name'],
+                    Student.class_id == student_info['class_id']
+                ).first()
+                if existing_student:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Student {student_info['first_name']} {student_info['last_name']} "
+                               f"already exists in class {student_info['class_id']}."
+                    )
+
+                # Create the student
+                student = Student(
+                    first_name=student_info['first_name'],
+                    last_name=student_info['last_name'],
+                    class_id=student_info['class_id']
+                )
+                db.add(student)
+                db.commit()
+                db.refresh(student)
+
+                # Associate parent and student
+                parent_student = ParentStudent(
+                    parent_id=new_user.id,
+                    student_id=student.id
+                )
+                db.add(parent_student)
+                db.commit()
+
+    # Fetch the user with the profile for the response
+    db_user = (
+        db.query(User)
+        .options(joinedload(User.profile))
+        .filter(User.id == new_user.id)
+        .first()
     )
 
-
-
-@router.post("/auth/forgot-password")
-def forgot_password(email: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No user found with this email."
-        )
-    
-    # Generate a secure reset token
-    reset_token = secrets.token_urlsafe(32)
-    reset_tokens[user.id] = reset_token
-
-    # Send email (implement `send_email` in utils)
-    send_email(
-        to_email=user.email,
-        subject="Password Reset",
-        body=f"Use this token to reset your password: {reset_token}"
-    )
-
-    return {"message": "Password reset token sent to your email."}
+    return UserResponse.model_validate(db_user)
 
 
 @router.post("/auth/reset-password")
@@ -142,7 +179,7 @@ def reset_password(email: str, token: str, new_password: str, db: Session = Depe
 
 
 # Endpoint for user login and token generation
-@router.post("/token")
+@router.post("/token", include_in_schema=False)
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
@@ -202,3 +239,5 @@ def role_required(required_role: str):
             )
         return user
     return role_checker
+
+

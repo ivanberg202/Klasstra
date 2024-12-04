@@ -10,9 +10,13 @@ from app.database import Base, engine
 
 app = FastAPI()
 
+# # Wipe the database by dropping all tables
+# Base.metadata.drop_all(bind=engine)
+# print("All tables dropped.")
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
 
 
 # Include routers

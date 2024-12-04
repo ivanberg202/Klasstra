@@ -1,3 +1,49 @@
+Test user without other entities:
+{
+  "username": "ivan",
+  "email": "palenik.i@gmail.com",
+  "password": "1234",
+  "role": "admin",
+  "language": "en",
+  "profile": {
+    "first_name": "ivan",
+    "last_name": "berg",
+    "phone_number": "015224126322",
+    "address": "SP32",
+    "hobbies": "coding",
+    "preferred_contact_method": "app",
+    "school_id": null,
+    "class_id": null,
+    "students": []
+  }}
+
+
+Test user with school, etc.
+{
+  "username": "ivan",
+  "email": "palenik.i@gmail.com",
+  "password": "1234",
+  "role": "admin",
+  "language": "en",
+  "profile": {
+    "first_name": "ivan",
+    "last_name": "berg",
+    "phone_number": "015224126322",
+    "address": "SP32",
+    "hobbies": "coding",
+    "preferred_contact_method": "app",
+    "school_id": 1,
+    "class_id": 1,
+    "students": [
+      {
+        "first_name": "Levin",
+        "last_name": "Berg",
+        "class_id": 1
+      }
+    ]
+  }
+}
+
 Include into get_user also the missing data points from related user_profiles table. 
 Allow update all the user details and related user_profiles details in update_user endpoint.
 

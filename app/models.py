@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
+from sqlalchemy.dialects.postgresql import ARRAY
 
 
 class School(Base):
@@ -43,7 +44,7 @@ class User(Base):
     classes_taught = relationship("TeacherClass", back_populates="teacher")
     represented_classes = relationship("ClassRepresentative", back_populates="parent")
     announcements_created = relationship("Announcement", back_populates="creator")
-    profile = relationship("UserProfile", back_populates="user", uselist=False)  # Add this
+    profile = relationship("UserProfile", back_populates="user", uselist=False)
 
 
 class Student(Base):
@@ -101,6 +102,7 @@ class Announcement(Base):
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     class_id = Column(Integer, ForeignKey("classes.id"), nullable=False)
     target_audience = Column(String, nullable=False)  # 'parents', 'teachers'
+    recipients = Column(ARRAY(Integer), nullable=True)  # Add this line
 
     creator = relationship("User", back_populates="announcements_created")
     class_ = relationship("Class", back_populates="announcements")
@@ -115,8 +117,12 @@ class UserProfile(Base):
     last_name = Column(String)
     phone_number = Column(String)
     address = Column(String)
-    hobbies = Column(String)  # Optional field for hobbies or interests
-    preferred_contact_method = Column(String)  # e.g., 'email', 'phone'
+    hobbies = Column(String)
+    preferred_contact_method = Column(String)
+    # Add the following fields
+    school_id = Column(Integer, ForeignKey("schools.id"), nullable=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=True)
 
     user = relationship("User", back_populates="profile")
-
+    school = relationship("School")
+    class_ = relationship("Class")
