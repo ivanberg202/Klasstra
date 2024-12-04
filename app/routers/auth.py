@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, UserProfile, School, Class, Student, ParentStudent
+from app.models import User, UserProfile, School, Class, Student, ParentStudent, ClassRepresentative
 from app.schemas.users import UserCreate, UserProfileResponse, UserResponse, StudentCreate
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -141,6 +141,20 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
                 db.add(parent_student)
                 db.commit()
 
+        # Add to the class_representative table if the role is class_representative
+        if user_data.role == "class_representative" and profile_data.get("class_id"):
+            existing_class_rep = db.query(ClassRepresentative).filter(
+                ClassRepresentative.parent_id == new_user.id,
+                ClassRepresentative.class_id == profile_data["class_id"]
+            ).first()
+            if not existing_class_rep:
+                class_rep = ClassRepresentative(
+                    parent_id=new_user.id,
+                    class_id=profile_data["class_id"]
+                )
+                db.add(class_rep)
+                db.commit()
+
     # Fetch the user with the profile for the response
     db_user = (
         db.query(User)
@@ -150,6 +164,7 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     )
 
     return UserResponse.model_validate(db_user)
+
 
 
 @router.post("/auth/reset-password")
