@@ -54,6 +54,12 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TeacherClassAssignment(BaseModel):
+    teacher_id: int
+    class_id: int
+
+
+
 # Schemas for students
 class StudentCreate(BaseModel):
     first_name: str

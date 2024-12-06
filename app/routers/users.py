@@ -6,9 +6,8 @@ from app.schemas.users import UserCreate, UserUpdate, UserResponse, StudentCreat
 from app.routers.auth import get_current_user, role_required
 import json
 from app.schemas.users import UserResponse
-from app.models import User
+from app.models import User, TeacherClass, ClassRepresentative
 from app.schemas.users import UserResponse, UserProfileResponse
-
 
 router = APIRouter()
 
@@ -56,14 +55,18 @@ def update_user(username: str, user_update: UserUpdate, db: Session = Depends(ge
     if profile_data:
         students_data = profile_data.pop('students', None)
 
+        # Remove any class or school-related fields
+        profile_data.pop('class_id', None)
+        profile_data.pop('school_id', None)
+
         if db_user.profile:
-            for key, value in profile_data.items():
-                setattr(db_user.profile, key, value)
+            for p_key, p_value in profile_data.items():
+                setattr(db_user.profile, p_key, p_value)
         else:
             db_user.profile = UserProfile(user_id=db_user.id, **profile_data)
             db.add(db_user.profile)
 
-        # Handle students if provided
+        # Handle students if provided (for parents)
         if students_data:
             for student_info in students_data:
                 # Create the student
@@ -87,6 +90,7 @@ def update_user(username: str, user_update: UserUpdate, db: Session = Depends(ge
     db.commit()
     db.refresh(db_user)
     return db_user
+
 
 
 @router.post("/users/parent/add_child", response_model=StudentResponse)
@@ -141,6 +145,7 @@ def add_child(
     return new_student
 
 
+
 @router.delete("/users/{username}/delete", response_model=dict)
 def delete_user(username: str, db: Session = Depends(get_db), user: User = Depends(role_required("admin"))):
     # Fetch the user by username
@@ -165,3 +170,5 @@ def delete_user(username: str, db: Session = Depends(get_db), user: User = Depen
     db.delete(db_user)
     db.commit()
     return {"detail": f"User {username} successfully deleted"}
+
+

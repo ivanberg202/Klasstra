@@ -13,7 +13,6 @@ import secrets
 from app.utils import send_email  # A utility function for sending emails
 from sqlalchemy.orm import joinedload
 
-
 router = APIRouter()
 
 # Password hashing utility
@@ -42,7 +41,8 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    
+    to_encode["first_name"] = data.get("first_name")  # Include first_name in token
+
     # Ensure 'sub' is a string
     if "sub" in to_encode:
         to_encode["sub"] = str(to_encode["sub"])
@@ -60,18 +60,6 @@ def authenticate_user(username: str, password: str, db: Session) -> User:
 
 @router.post("/auth/register", response_model=UserResponse)
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    # Validate school_id
-    if user_data.profile and user_data.profile.school_id:
-        school = db.query(School).filter(School.id == user_data.profile.school_id).first()
-        if not school:
-            raise HTTPException(status_code=400, detail="Invalid school_id")
-
-    # Validate class_id
-    if user_data.profile and user_data.profile.class_id:
-        class_instance = db.query(Class).filter(Class.id == user_data.profile.class_id).first()
-        if not class_instance:
-            raise HTTPException(status_code=400, detail="Invalid class_id")
-
     # Check for existing user
     existing_user = (
         db.query(User)
@@ -97,17 +85,22 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    # Create the profile
+    # Create the profile if provided (but do not handle class logic here)
     profile = None
     if user_data.profile:
         profile_data = user_data.profile.dict(exclude_unset=True)
         students_data = profile_data.pop('students', None)
 
+        # Remove any class or school related fields from profile_data if present
+        profile_data.pop('school_id', None)
+        profile_data.pop('class_id', None)
+
+        # Create the UserProfile
         profile = UserProfile(user_id=new_user.id, **profile_data)
         db.add(profile)
         db.commit()
 
-        # Handle students
+        # Handle students if provided (this is about adding children, not assigning classes to the user)
         if students_data:
             for student_info in students_data:
                 # Check for duplicate student in the same class
@@ -141,19 +134,7 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
                 db.add(parent_student)
                 db.commit()
 
-        # Add to the class_representative table if the role is class_representative
-        if user_data.role == "class_representative" and profile_data.get("class_id"):
-            existing_class_rep = db.query(ClassRepresentative).filter(
-                ClassRepresentative.parent_id == new_user.id,
-                ClassRepresentative.class_id == profile_data["class_id"]
-            ).first()
-            if not existing_class_rep:
-                class_rep = ClassRepresentative(
-                    parent_id=new_user.id,
-                    class_id=profile_data["class_id"]
-                )
-                db.add(class_rep)
-                db.commit()
+    # No call to sync_role_specific_relationships here, since class assignment is handled elsewhere now.
 
     # Fetch the user with the profile for the response
     db_user = (
@@ -194,7 +175,7 @@ def reset_password(email: str, token: str, new_password: str, db: Session = Depe
 
 
 # Endpoint for user login and token generation
-@router.post("/token", include_in_schema=False)
+@router.post("/token", include_in_schema=True)
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
@@ -206,8 +187,12 @@ def login_for_access_token(
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # Include first_name from the user's profile
+    first_name = user.profile.first_name if user.profile else "User"
+    
     access_token = create_access_token(
-        data={"sub": user.id, "role": user.role}
+        data={"sub": user.id, "role": user.role, "first_name": first_name}
     )
     return {"access_token": access_token, "token_type": "bearer"}
 

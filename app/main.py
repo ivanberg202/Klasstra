@@ -1,23 +1,30 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.database import Base, engine
 from app.models import User, School, Class, Student, ParentStudent, TeacherClass, ClassRepresentative, Announcement
 from app.routers import auth, announcements, classes, schools, users, dashboards
-from fastapi import FastAPI
-from fastapi.openapi.utils import get_openapi
-import logging
-from app.database import Base, engine
+import os
 
-
+# Initialize the FastAPI app
 app = FastAPI()
 
-# # Wipe the database by dropping all tables
-# Base.metadata.drop_all(bind=engine)
-# print("All tables dropped.")
+# Mount static directory for serving custom assets (e.g., custom CSS)
+static_directory = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_directory), name="static")
+
+# Add CORS middleware
+origins = ["http://localhost:5173"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
-
-
 
 # Include routers
 app.include_router(auth.router, tags=["Authentication"])

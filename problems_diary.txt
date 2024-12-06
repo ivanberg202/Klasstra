@@ -1,3 +1,25 @@
+Test teacher:
+{
+  "username": "teacher1",
+  "email": "teacher1@gmail.com",
+  "password": "1234",
+  "role": "teacher",
+  "language": "en",
+  "profile": {
+    "first_name": "teacher1",
+    "last_name": "t1",
+    "phone_number": "015224126322",
+    "address": "SP32",
+    "hobbies": "teaching",
+    "preferred_contact_method": "app",
+    "school_id": [1, 2],
+    "class_id": 1,
+    "students": null
+  }
+}
+
+
+
 Test user without other entities:
 {
   "username": "ivan",

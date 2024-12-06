@@ -4,6 +4,7 @@ from app.database import get_db
 from app.models import User, Class, Announcement, Student, ParentStudent, TeacherClass, School
 from app.routers.auth import get_current_user
 from typing import List
+from app.schemas.dashboards import TeacherDashboardResponse
 
 
 router = APIRouter()
@@ -57,7 +58,6 @@ def parent_dashboard(user: User = Depends(get_current_user), db: Session = Depen
 
 
 
-# Teacher Dashboard
 @router.get("/dashboard/teacher")
 def teacher_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if user.role != "teacher":
@@ -65,6 +65,7 @@ def teacher_dashboard(user: User = Depends(get_current_user), db: Session = Depe
 
     # Fetch classes taught by the teacher
     class_ids = [tc.class_id for tc in db.query(TeacherClass).filter(TeacherClass.teacher_id == user.id).all()]
+    classes = db.query(Class).filter(Class.id.in_(class_ids)).all()
 
     # Fetch announcements for these classes or created by the teacher
     announcements = (
@@ -76,8 +77,13 @@ def teacher_dashboard(user: User = Depends(get_current_user), db: Session = Depe
         .all()
     )
 
+    # Add a fallback for the name field
+    first_name = user.profile.first_name if user.profile and user.profile.first_name else "Teacher"
+
     return {
-        "announcements": announcements
+        "name": first_name,
+        "classes": classes,
+        "announcements": announcements,
     }
 
 
