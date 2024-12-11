@@ -25,6 +25,8 @@ class AnnouncementCreate(AnnouncementBase):
 class AnnouncementResponse(AnnouncementBase):
     id: int
     creator_id: int
+    creator_name: Optional[str] = None
+
 
     class Config:
         from_attributes = True

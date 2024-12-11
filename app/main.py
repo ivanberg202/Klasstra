@@ -9,22 +9,28 @@ import os
 # Initialize the FastAPI app
 app = FastAPI()
 
-# Mount static directory for serving custom assets (e.g., custom CSS)
-static_directory = os.path.join(os.path.dirname(__file__), "static")
+# Resolve the static directory path
+static_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), "static"))
+if not os.path.exists(static_directory):
+    print(f"Warning: Static directory {static_directory} does not exist.")
 app.mount("/static", StaticFiles(directory=static_directory), name="static")
 
 # Add CORS middleware
-origins = ["http://localhost:5173"]
+origins = ["http://localhost:5173", "http://127.0.0.1:5173"]  # Development frontend URLs
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins,  # Replace with ["*"] temporarily if needed
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Create database tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    print("Database tables created successfully.")
+except Exception as e:
+    print(f"Error creating database tables: {e}")
 
 # Include routers
 app.include_router(auth.router, tags=["Authentication"])

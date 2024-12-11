@@ -43,110 +43,80 @@
             Login
           </button>
         </form>
+        <!-- Register Redirect -->
+        <p class="mt-4 text-center">
+          Don't have an account?
+          <router-link to="/register" class="text-blue-500 hover:underline">Register here</router-link>
+        </p>
       </div>
     </div>
   </template>
   
   <script>
-  import api from '../api'; // Axios instance for API calls
-  
-  export default {
-    data() {
-      return {
-        username: '',
-        password: '',
-        isDarkMode: false,
-      };
-    },
-    methods: {
-        async login() {
-            try {
-                // Create form data for application/x-www-form-urlencoded
-                const formData = new URLSearchParams();
-                formData.append('username', this.username);
-                formData.append('password', this.password);
-                formData.append('grant_type', 'password');
+import { ref } from 'vue';
+import { useAuth } from '../composables/useAuth';
+import { useRouter } from 'vue-router';
 
-                // Send form data to the backend
-                const response = await api.post('/token', formData);
+export default {
+  setup() {
+    const { autoLogin, redirectToDashboard } = useAuth();
+    const router = useRouter();
+    const username = ref('');
+    const password = ref('');
+    const isDarkMode = ref(false);
 
-                const { access_token } = response.data;
+    const login = async () => {
+  try {
+    const { token, role } = await autoLogin(username.value, password.value);
+    console.log('Token stored successfully:', token);
 
-                // Decode the token to get user details
-                const payload = JSON.parse(atob(access_token.split('.')[1]));
+    // Wait a short delay to ensure the token is accessible globally
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-                // Store the token, role, and first_name
-                localStorage.setItem('token', access_token);
-                localStorage.setItem('role', payload.role);
-                localStorage.setItem('first_name', payload.first_name);
+    redirectToDashboard(router, role);
+  } catch (error) {
+    console.error('Login failed:', error);
+    alert('Invalid username or password. Please try again.');
+  }
+};
 
-                // Redirect based on role
-                this.redirectToDashboard(payload.role);
-            } catch (error) {
-                console.error('Login failed:', error);
-                alert('Invalid username or password. Please try again.');
-            }
-            },
-      redirectToDashboard(role) {
-        const roleToDashboard = {
-          parent: '/parent-dashboard',
-          teacher: '/teacher-dashboard',
-          admin: '/admin-dashboard',
-        };
-  
-        if (roleToDashboard[role]) {
-          this.$router.push(roleToDashboard[role]);
-        } else {
-          // Notify the user and clear the token if the role is unsupported
-          alert(
-            `Your role "${role}" is not supported in this application. Please contact support.`
-          );
-          localStorage.clear();
-        }
-      },
-      toggleDarkMode() {
-        this.isDarkMode = !this.isDarkMode;
-        const html = document.documentElement;
-        if (this.isDarkMode) {
-          html.classList.add('dark');
-          localStorage.setItem('theme', 'dark');
-        } else {
-          html.classList.remove('dark');
-          localStorage.setItem('theme', 'light');
-        }
-      },
-    },
-    created() {
-      // Initialize dark mode based on localStorage or system preference
-      const savedTheme = localStorage.getItem('theme');
-      this.isDarkMode =
-        savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      if (this.isDarkMode) {
-        document.documentElement.classList.add('dark');
+
+
+    const toggleDarkMode = () => {
+      isDarkMode.value = !isDarkMode.value;
+      const html = document.documentElement;
+      if (isDarkMode.value) {
+        html.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
       } else {
-        document.documentElement.classList.remove('dark');
+        html.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
       }
-    },
-  };
-  </script>
-  
-  <style scoped>
-  /* Ensure no margins or extra space */
-  html,
-  body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    overflow: hidden;
-  }
-  
-  .flex {
-    box-sizing: border-box; /* Ensure the element respects width/height */
-  }
-  
-  .absolute {
-    z-index: 10; /* Ensure the button is on top of all elements */
-  }
-  </style>
-  
+    };
+
+    // Initialize theme
+    const savedTheme = localStorage.getItem('theme');
+    isDarkMode.value =
+      savedTheme === 'dark' ||
+      (!savedTheme &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (isDarkMode.value) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    return {
+      username,
+      password,
+      isDarkMode,
+      login,
+      toggleDarkMode,
+    };
+  },
+};
+</script>
+
+<style scoped>
+/* Existing styles */
+</style>

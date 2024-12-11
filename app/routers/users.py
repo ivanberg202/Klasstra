@@ -12,13 +12,22 @@ from app.schemas.users import UserResponse, UserProfileResponse
 router = APIRouter()
 
 
+from sqlalchemy.orm import joinedload
+
 @router.get("/users/{username}", response_model=UserResponse)
 def get_user(username: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     # Allow access only to admin or the user themselves
     if user.username != username and user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden")
     
-    db_user = db.query(User).filter(User.username == username).first()
+    # Fetch the user with the profile eagerly loaded
+    db_user = (
+        db.query(User)
+        .options(joinedload(User.profile))  # Eagerly load the profile relationship
+        .filter(User.username == username)
+        .first()
+    )
+    
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     
@@ -29,7 +38,7 @@ def get_user(username: str, db: Session = Depends(get_db), user: User = Depends(
         email=db_user.email,
         role=db_user.role,
         language=db_user.language,
-        profile=db_user.profile and UserProfileResponse.from_orm(db_user.profile)
+        profile=db_user.profile and UserProfileResponse.model_construct(**db_user.profile.__dict__)
     )
 
 
@@ -99,7 +108,9 @@ def add_child(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    # Ensure the user is a parent
+    print("Received payload:", student_data)
+    print("Current user:", user.id, user.role)
+
     if user.role != "parent":
         raise HTTPException(status_code=403, detail="Only parents can add children.")
 
@@ -158,11 +169,13 @@ def delete_user(username: str, db: Session = Depends(get_db), user: User = Depen
         db.delete(db_user.profile)
 
     # Delete associated students (via ParentStudent relationship)
-    parent_students = db.query(ParentStudent).filter(ParentStudent.parent_id == db_user.id).all()
-    for association in parent_students:
-        # Delete student only if no other parents are associated with it
-        student = db.query(Student).filter(Student.id == association.student_id).first()
-        db.delete(association)
+    for association in db_user.children:
+        student = association  # Directly access the student
+        db.query(ParentStudent).filter(
+            ParentStudent.parent_id == db_user.id, 
+            ParentStudent.student_id == student.id
+        ).delete()
+        # Delete the student only if no other parents are associated
         if not db.query(ParentStudent).filter(ParentStudent.student_id == student.id).first():
             db.delete(student)
 
@@ -172,3 +185,37 @@ def delete_user(username: str, db: Session = Depends(get_db), user: User = Depen
     return {"detail": f"User {username} successfully deleted"}
 
 
+
+@router.delete("/users/parent/delete_child/{student_id}", status_code=200)
+def delete_child(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    if user.role not in ["parent", "admin"]:
+        raise HTTPException(status_code=403, detail="Only parents and admins can delete children.")
+
+    # Check if the student exists
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    # Check if the student is associated with the parent
+    parent_student = (
+        db.query(ParentStudent)
+        .filter(ParentStudent.parent_id == user.id, ParentStudent.student_id == student_id)
+        .first()
+    )
+    if not parent_student:
+        raise HTTPException(status_code=403, detail="This student is not associated with you.")
+
+    # Delete the association
+    db.delete(parent_student)
+
+    # Optionally, delete the student record as well (if not referenced elsewhere)
+    db.delete(student)
+
+    # Commit the changes
+    db.commit()
+
+    return {"detail": "Student deleted successfully."}

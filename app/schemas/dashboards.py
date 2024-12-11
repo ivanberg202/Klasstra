@@ -1,5 +1,7 @@
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+
 
 class ClassResponse(BaseModel):
     id: int
@@ -11,10 +13,20 @@ class ClassResponse(BaseModel):
 class AnnouncementResponse(BaseModel):
     id: int
     title: str
-    content_en: str
+    content_en: Optional[str] = None
+    content_de: Optional[str] = None
+    content_fr: Optional[str] = None
+    original_language: str
+    target_audience: str
     class_id: int
+    class_name: str
+    creator_id: int
+    creator_name: str
+    date_submitted: Optional[datetime] = None
+    recipients: Optional[List[int]] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 class ParentDashboardResponse(BaseModel):
     classes: List[ClassResponse]

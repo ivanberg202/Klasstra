@@ -6,7 +6,8 @@ class SchoolBase(BaseModel):
 class SchoolCreate(SchoolBase):
     pass
 
-class SchoolResponse(SchoolBase):
+class SchoolResponse(BaseModel):
     id: int
+    name: str
 
     model_config = ConfigDict(from_attributes=True)

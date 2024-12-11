@@ -1,8 +1,12 @@
+# app/routers/auth.py
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import User, UserProfile, School, Class, Student, ParentStudent, ClassRepresentative
-from app.schemas.users import UserCreate, UserProfileResponse, UserResponse, StudentCreate
+import logging
+from sqlalchemy import and_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
+from typing import List, Optional
+from pydantic import BaseModel
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
@@ -10,56 +14,128 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 import secrets
-from app.utils import send_email  # A utility function for sending emails
-from sqlalchemy.orm import joinedload
+from app.utils.utils import send_email
+
+from app.database import get_db
+from app.models import User, UserProfile, Class, Student, ParentStudent, TeacherClass, ClassRepresentative
+from app.schemas.users import (
+    UserCreate,
+    UserResponse,
+    UserProfileCreate,
+    UserProfileResponse,
+    StudentCreate,
+    TeacherClassAssignment
+)
 
 router = APIRouter()
 
-# Password hashing utility
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-reset_tokens = {}  # In-memory store for reset tokens (replace with DB in production)
-
-# OAuth2PasswordBearer setup with the correct token URL
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env
 load_dotenv()
 
 # JWT Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback_key")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_key")  # Replace 'fallback_key' with a secure key
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
 ALGORITHM = "HS256"
 
+# Password hashing utility
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# OAuth2 scheme setup
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+
+# Password Reset Token Model (For demonstration; use DB in production)
+class PasswordResetToken(BaseModel):
+    token: str
+    expires_at: datetime
+
+# In-memory store for reset tokens (Replace with persistent storage in production)
+reset_tokens = {}  # key: user_id, value: PasswordResetToken
 
 # Function to hash passwords
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
-# Function to create JWT access tokens
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    to_encode["first_name"] = data.get("first_name")  # Include first_name in token
+# Function to verify passwords
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
-    # Ensure 'sub' is a string
-    if "sub" in to_encode:
-        to_encode["sub"] = str(to_encode["sub"])
-    
+# Function to create JWT access tokens
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-
 # Function to authenticate user credentials
-def authenticate_user(username: str, password: str, db: Session) -> User:
+def authenticate_user(username: str, password: str, db: Session) -> Optional[User]:
     user = db.query(User).filter(User.username == username).first()
-    if not user or not pwd_context.verify(password, user.password):
+    print(f"Query result for username '{username}': {user}")
+
+    if not user:
+        return None
+    if not verify_password(password, user.password):
         return None
     return user
 
+# Role-based access control decorator (supports multiple roles)
+def role_required(allowed_roles: List[str]):
+    def decorator(user: User = Depends(get_current_user)):
+        if user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Operation not permitted for role '{user.role}'."
+            )
+        return user
+    return decorator
 
-@router.post("/auth/register", response_model=UserResponse)
+# Dependency to get the current authenticated user
+def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
+            logger.error("JWT payload missing 'sub'")
+            raise credentials_exception
+        user_id = int(user_id_str)
+        role = payload.get("role")
+        if role is None:
+            logger.error("JWT payload missing 'role'")
+            raise credentials_exception
+        token_data = {"user_id": user_id, "role": role}
+    except (JWTError, ValueError) as e:
+        logger.error(f"Error decoding JWT: {e}")
+        raise credentials_exception
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        logger.error(f"User with ID {user_id} not found")
+        raise credentials_exception
+    return user
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+logger.addHandler(console_handler)
+
+
+@router.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+    """
+    Register a new user.
+    """
     # Check for existing user
     existing_user = (
         db.query(User)
@@ -68,98 +144,81 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     )
     if existing_user:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="A user with this username or email already exists."
         )
 
-    # Create the new user
-    hashed_password = hash_password(user_data.password)
-    new_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        password=hashed_password,
-        role=user_data.role,
-        language=user_data.language,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    # Create the profile if provided (but do not handle class logic here)
-    profile = None
-    if user_data.profile:
-        profile_data = user_data.profile.dict(exclude_unset=True)
-        students_data = profile_data.pop('students', None)
-
-        # Remove any class or school related fields from profile_data if present
-        profile_data.pop('school_id', None)
-        profile_data.pop('class_id', None)
-
-        # Create the UserProfile
-        profile = UserProfile(user_id=new_user.id, **profile_data)
-        db.add(profile)
+    try:
+        # Hash the user's password
+        hashed_password = hash_password(user_data.password)
+        
+        # Create the new user without optional fields
+        new_user = User(
+            username=user_data.username,
+            email=user_data.email,
+            password=hashed_password,
+            role=user_data.role,
+        )
+        db.add(new_user)
+        
+        # Flush to assign an ID to new_user
+        db.flush()
+        
+        # Commit the new user to the database
         db.commit()
+        db.refresh(new_user)
 
-        # Handle students if provided (this is about adding children, not assigning classes to the user)
-        if students_data:
-            for student_info in students_data:
-                # Check for duplicate student in the same class
-                existing_student = db.query(Student).filter(
-                    Student.first_name == student_info['first_name'],
-                    Student.last_name == student_info['last_name'],
-                    Student.class_id == student_info['class_id']
-                ).first()
-                if existing_student:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Student {student_info['first_name']} {student_info['last_name']} "
-                               f"already exists in class {student_info['class_id']}."
-                    )
+    except IntegrityError as e:
+        db.rollback()
+        logger.exception(f"Integrity error for user: {user_data.username} - {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Integrity error occurred during registration. Possibly a duplicate entry."
+        ) from e
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Unexpected error during registration for user: {user_data.username} - {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during registration."
+        ) from e
 
-                # Create the student
-                student = Student(
-                    first_name=student_info['first_name'],
-                    last_name=student_info['last_name'],
-                    class_id=student_info['class_id']
-                )
-                db.add(student)
-                db.commit()
-                db.refresh(student)
-
-                # Associate parent and student
-                parent_student = ParentStudent(
-                    parent_id=new_user.id,
-                    student_id=student.id
-                )
-                db.add(parent_student)
-                db.commit()
-
-    # No call to sync_role_specific_relationships here, since class assignment is handled elsewhere now.
-
-    # Fetch the user with the profile for the response
+    # Fetch the user for the response
     db_user = (
         db.query(User)
-        .options(joinedload(User.profile))
         .filter(User.id == new_user.id)
         .first()
     )
 
-    return UserResponse.model_validate(db_user)
+    return UserResponse.from_orm(db_user)
 
 
-
-@router.post("/auth/reset-password")
+@router.post("/auth/reset-password", response_model=dict, status_code=status.HTTP_200_OK)
 def reset_password(email: str, token: str, new_password: str, db: Session = Depends(get_db)):
+    """
+    Reset a user's password.
+    - **email**: User's email address.
+    - **token**: Reset token sent to the user's email.
+    - **new_password**: New password to set.
+    """
     # Fetch the user by email
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     
     # Validate the reset token
-    if reset_tokens.get(user.id) != token:
+    reset_token = reset_tokens.get(user.id)
+    if not reset_token or reset_token.token != token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token."
+        )
+    
+    if datetime.utcnow() > reset_token.expires_at:
+        del reset_tokens[user.id]
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired."
         )
 
     # Update the user's password
@@ -173,71 +232,66 @@ def reset_password(email: str, token: str, new_password: str, db: Session = Depe
 
 
 
-
 # Endpoint for user login and token generation
-@router.post("/token", include_in_schema=True)
+@router.post("/token", response_model=dict)
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
+    """
+    Authenticate user and return a JWT access token.
+    """
     user = authenticate_user(form_data.username, form_data.password, db)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="Invalid username or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Include first_name from the user's profile
+    # Fetch first_name from the user's profile
     first_name = user.profile.first_name if user.profile else "User"
     
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.id, "role": user.role, "first_name": first_name}
+        data={"sub": str(user.id), "role": user.role},
+        expires_delta=access_token_expires
     )
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 
-# Function to retrieve user from JWT token
-def get_user_from_token(db: Session, token: str) -> User:
+# Function to generate a secure reset token
+def generate_reset_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+
+@router.post("/auth/request-password-reset", response_model=dict, status_code=status.HTTP_200_OK)
+def request_password_reset(email: str, db: Session = Depends(get_db)):
+    """
+    Request a password reset. Sends a reset token to the user's email.
+    """
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    # Generate a secure reset token
+    token = generate_reset_token()
+    expires_at = datetime.utcnow() + timedelta(hours=1)  # Token valid for 1 hour
+    reset_tokens[user.id] = PasswordResetToken(token=token, expires_at=expires_at)
+
+    # Send the reset token via email
+    reset_link = f"https://yourdomain.com/reset-password?email={email}&token={token}"
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        user_role = payload.get("role")
-        if user_id is None or user_role is None:
-            return None
-        user = db.query(User).filter(User.id == int(user_id)).first()
-        if user:
-            user.role = user_role  # Assign the role from the token to the user object
-        return user
-    except JWTError:
-        return None
+        send_email(
+            to_email=user.email,
+            subject="Password Reset Request",
+            body=f"Hi {user.username},\n\nClick the link below to reset your password:\n{reset_link}\n\nThis link will expire in 1 hour.\n\nIf you did not request a password reset, please ignore this email."
+        )
+    except Exception as e:
+        # In production, handle email sending errors appropriately
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send reset email.")
 
-# Dependency to get the current authenticated user
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        user_role = payload.get("role")
-        if user_id is None or user_role is None:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-        user = db.query(User).filter(User.id == int(user_id)).first()
-        if user:
-            user.role = user_role  # Assign the role from the token to the user object
-        return user
-    except JWTError as e:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-
-# Role-based access control decorator
-def role_required(required_role: str):
-    def role_checker(user: User = Depends(get_current_user)):
-        if user.role != required_role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User does not have the required {required_role} role"
-            )
-        return user
-    return role_checker
-
-
+    return {"message": "Password reset link has been sent to your email."}

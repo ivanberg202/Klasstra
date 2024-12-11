@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -6,6 +7,7 @@ from app.schemas.schools import SchoolCreate, SchoolResponse
 from app.routers.auth import role_required
 
 router = APIRouter()
+
 
 @router.post("/schools/create", response_model=SchoolResponse, dependencies=[Depends(role_required("admin"))])
 def create_school(school_data: SchoolCreate, db: Session = Depends(get_db)):
@@ -17,6 +19,12 @@ def create_school(school_data: SchoolCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_school)
     return new_school
+
+
+@router.get("/schools/all", response_model=List[SchoolResponse])
+def get_all_schools(db: Session = Depends(get_db)):
+    schools = db.query(School).all()
+    return schools
 
 
 @router.get("/schools/{school_id}", response_model=SchoolResponse, dependencies=[Depends(role_required("admin"))])
