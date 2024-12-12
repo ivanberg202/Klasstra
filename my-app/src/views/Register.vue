@@ -10,7 +10,7 @@
       <UserBaseFields v-model="userBase" />
 
       <!-- Debugging: Display userBase -->
-      <pre class="bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded p-2 mt-2">{{ JSON.stringify(userBase, null, 2) }}</pre>
+      <!-- <pre class="bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded p-2 mt-2">{{ JSON.stringify(userBase, null, 2) }}</pre> -->
 
       <!-- Error Message -->
       <div v-if="errorMessage" class="text-center text-red-500 dark:text-red-400 mb-4">

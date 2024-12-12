@@ -1,3 +1,5 @@
+<!-- CreateAnnouncement.vue -->
+
 <template>
   <div class="bg-gray-100 dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
     <!-- Removed Navbar to avoid duplication -->
@@ -27,9 +29,10 @@
           </div>
           <!-- Class Selection -->
           <div class="mb-6">
-            <ClassSelector
-              :classes="classes"
+            <ClassSelectorAnnouncement
               v-model:selectedClassId="selectedClassId"
+              :isLoading="isLoading"
+              @class-selected="handleClassSelected"
             />
           </div>
           <!-- Action Buttons -->
@@ -56,37 +59,30 @@
 
 <script>
 import api from '../api';
-import ClassSelector from '../components/ClassSelector.vue';
+import ClassSelectorAnnouncement from '../components/ClassSelectorAnnouncement.vue';
 
 export default {
   name: 'CreateAnnouncement',
   components: {
-    ClassSelector,
+    ClassSelectorAnnouncement,
   },
   data() {
     return {
       title: '',
       content: '',
       selectedClassId: '',
-      classes: [],
+      isLoading: false,
     };
   },
   methods: {
-    async fetchClasses() {
-      try {
-        const response = await api.get('/classes/unrestricted');
-        this.classes = response.data || [];
-        // If classes are returned, optionally set the first one as default
-        if (this.classes.length > 0) {
-          this.selectedClassId = this.classes[0].id;
-        }
-      } catch (error) {
-        console.error('Error fetching classes:', error);
-        alert('Failed to load classes.');
-      }
-    },
     async createAnnouncement() {
+      if (!this.selectedClassId) {
+        alert('Please select a class for the announcement.');
+        return;
+      }
+
       try {
+        this.isLoading = true;
         const payload = {
           title: this.title,
           content_en: this.content,
@@ -101,14 +97,16 @@ export default {
       } catch (error) {
         console.error(error);
         alert('Failed to create announcement.');
+      } finally {
+        this.isLoading = false;
       }
     },
     cancel() {
       this.$router.push('/teacher-dashboard');
-    }
-  },
-  created() {
-    this.fetchClasses();
+    },
+    handleClassSelected(classId) {
+      this.selectedClassId = classId;
+    },
   },
 };
 </script>

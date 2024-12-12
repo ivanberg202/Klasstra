@@ -5,6 +5,17 @@ from app.database import Base, engine
 from app.models import User, School, Class, Student, ParentStudent, TeacherClass, ClassRepresentative, Announcement
 from app.routers import auth, announcements, classes, schools, users, dashboards
 import os
+import logging
+
+
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s:%(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 # Initialize the FastAPI app
 app = FastAPI()

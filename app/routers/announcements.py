@@ -1,6 +1,7 @@
 # app/routers/announcements.py
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi.logger import logger
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
@@ -13,7 +14,7 @@ from app.models import (
     ParentStudent,
     Student,
 )
-from app.schemas.announcements import AnnouncementCreate, AnnouncementResponse
+from app.schemas.announcements import AnnouncementCreate, AnnouncementResponse, AnnouncementOut
 from app.routers.auth import get_current_user
 
 router = APIRouter()
@@ -108,3 +109,63 @@ def get_class_reps_in_school(user: User, db: Session) -> List[int]:
         class_rep_ids.remove(user.id)
 
     return class_rep_ids
+
+
+@router.get("/announcements", response_model=List[AnnouncementOut])
+def get_announcements(
+    class_ids: List[int] = Query(..., description="List of class IDs"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        # Log input parameters
+        logger.info(f"Received request to fetch announcements for class IDs: {class_ids} by user: {current_user.id}")
+
+        if not class_ids:
+            logger.warning("class_ids parameter is missing")
+            raise HTTPException(status_code=400, detail="class_ids parameter is required")
+
+        # Fetch announcements with related class and creator
+        announcements = (
+            db.query(Announcement)
+            .join(Class, Announcement.class_id == Class.id)
+            .filter(Announcement.class_id.in_(class_ids))
+            .all()
+        )
+
+        logger.info(f"Fetched {len(announcements)} announcements from the database.")
+
+        if not announcements:
+            logger.info("No announcements found for the given class IDs.")
+            return []
+
+        # Serialize announcements
+        serialized_announcements = []
+        for announcement in announcements:
+            content = (
+                announcement.content_de
+                or announcement.content_en
+                or announcement.content_fr
+                or "No content available."
+            )
+
+            creator_name = announcement.creator.username if announcement.creator else "Unknown Creator"
+
+            serialized_announcement = AnnouncementOut(
+                id=announcement.id,
+                title=announcement.title,
+                content=content,
+                class_id=announcement.class_id,
+                class_name=announcement.class_.name if announcement.class_ else "Unknown Class",
+                school_name=announcement.class_.school.name if announcement.class_ and announcement.class_.school else "Unknown School",
+                date_submitted=announcement.created_at,
+                creator_name=creator_name,
+            )
+            serialized_announcements.append(serialized_announcement)
+
+        logger.info(f"Serialized announcements: {serialized_announcements}")
+        return serialized_announcements
+
+    except Exception as e:
+        logger.error(f"Error occurred in /announcements endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch announcements")

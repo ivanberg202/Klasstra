@@ -46,6 +46,7 @@ class User(Base):
     represented_classes = relationship("ClassRepresentative", back_populates="parent")
     announcements_created = relationship("Announcement", back_populates="creator")
     profile = relationship("UserProfile", back_populates="user", uselist=False)
+    announcements_created = relationship("Announcement", back_populates="creator")
 
 
 

@@ -1,3 +1,5 @@
+// useParentDashboard.js
+
 import { ref } from 'vue';
 import api from '../api';
 
@@ -14,6 +16,8 @@ export function useParentDashboard() {
   
     if (!token) {
       console.error('useParentDashboard.js: Cannot fetch dashboard data: Token is missing.');
+      errorMessage.value = 'Authentication token is missing. Please log in again.';
+      isLoading.value = false;
       return;
     }
   
@@ -21,8 +25,21 @@ export function useParentDashboard() {
     try {
       const response = await api.get('/dashboard/parent');
       console.log('useParentDashboard.js: Dashboard data received:', response.data);
-      announcements.value = response.data.announcements;
-      children.value = response.data.students;
+      
+      // Map announcements to ensure 'content' is defined
+      if (Array.isArray(response.data.announcements)) {
+        announcements.value = response.data.announcements.map((announcement) => ({
+          ...announcement,
+          content: announcement.content || announcement.content_en || announcement.content_de || announcement.content_fr || 'No content available.',
+        }));
+        console.log('Mapped announcements with content:', announcements.value);
+      } else {
+        console.warn('useParentDashboard.js: Announcements data is not an array.');
+        announcements.value = [];
+      }
+
+      children.value = response.data.students || [];
+      console.log('Children updated:', children.value);
     } catch (error) {
       console.error('useParentDashboard.js: Error fetching dashboard data:', error);
       if (error.response) {
@@ -37,8 +54,6 @@ export function useParentDashboard() {
     }
   }
   
-  
-
   async function fetchClassesForSelection() {
     try {
       const response = await api.get('/classes/unrestricted'); // Use the new endpoint
@@ -49,7 +64,6 @@ export function useParentDashboard() {
       throw error;
     }
   }
-  
 
   async function addChild({ first_name, last_name, class_id }) {
     const payload = { first_name, last_name, class_id: parseInt(class_id, 10) };

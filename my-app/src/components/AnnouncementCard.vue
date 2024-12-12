@@ -1,29 +1,11 @@
 <!-- AnnouncementCard.vue -->
 <template>
-  <div class="p-4 bg-white dark:bg-gray-800 rounded shadow text-gray-900 dark:text-gray-100">
-    <!-- Title -->
-    <h3 class="text-lg font-medium mb-2">{{ title }}</h3>
-
-    <!-- Top Section: Class, Publisher, and Published Date -->
-    <div class="flex flex-wrap items-center text-sm text-gray-600 dark:text-gray-300 mb-3">
-      <!-- Class Name -->
-      <p v-if="className" class="mr-4">
-        <span class="font-semibold">Class:</span> {{ className }}
-      </p>
-
-      <!-- Publisher -->
-      <p v-if="publisher" class="mr-4">
-        <span class="font-semibold">Published by:</span> {{ publisher }}
-      </p>
-
-      <!-- Published Date -->
-      <p v-if="formattedDateTime">
-        <span class="font-semibold">Published:</span> {{ formattedDateTime }}
-      </p>
+  <div class="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <h3 class="text-lg font-medium">{{ title }}</h3>
+    <p class="text-sm text-gray-600 dark:text-gray-400">{{ content }}</p>
+    <div class="text-xs text-gray-500 dark:text-gray-500 mt-2">
+      Class: {{ className }} | Published by: {{ publisher }} | Submitted on: {{ formattedDate }}
     </div>
-
-    <!-- Content -->
-    <p v-html="formattedContent" class="mt-2"></p>
   </div>
 </template>
 
@@ -31,29 +13,44 @@
 export default {
   name: 'AnnouncementCard',
   props: {
-    title: { type: String, required: true },
-    content: { type: String, required: true },
-    className: { type: String, default: '' },
-    dateSubmitted: { type: String, default: '' },
-    publisher: { type: String, default: '' }, // New publisher prop
+    title: {
+      type: String,
+      required: true,
+    },
+    content: {
+      type: String,
+      default: 'No content available.', // Provide a default fallback
+    },
+    className: {
+      type: String,
+      required: true,
+    },
+    dateSubmitted: {
+      type: String, // Assuming ISO string
+      required: true,
+    },
+    publisher: { // Ensure this matches the serialized field
+      type: String,
+      required: true,
+    },
   },
   computed: {
-    formattedContent() {
-      // Replace newlines in content with <br> tags to preserve line breaks
-      return this.content.replace(/\n/g, '<br>');
+    formattedDate() {
+      return new Date(this.dateSubmitted).toLocaleDateString();
     },
-    formattedDateTime() {
-      const date = new Date(this.dateSubmitted);
-      if (isNaN(date.getTime())) return '';
-      return new Intl.DateTimeFormat(navigator.language, {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: navigator.language.includes('en-US'),
-      }).format(date);
-    },
+  },
+  created() {
+    console.log('AnnouncementCard props:', {
+      title: this.title,
+      content: this.content,
+      className: this.className,
+      dateSubmitted: this.dateSubmitted,
+      publisher: this.publisher,
+    });
   },
 };
 </script>
+
+<style scoped>
+/* Add any component-specific styles here */
+</style>

@@ -71,27 +71,42 @@ def teacher_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Teacher Dashboard Endpoint:
+    - Fetches teacher profile.
+    - Fetches assigned classes, announcements, and available classes.
+    """
     # Ensure the user is a teacher
     if current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="Access forbidden")
 
-    # Eagerly load the profile
-    user_with_profile = db.query(User).options(joinedload(User.profile)).filter(User.id == current_user.id).first()
+    # Load user profile with eager loading
+    user_with_profile = (
+        db.query(User)
+        .options(joinedload(User.profile))
+        .filter(User.id == current_user.id)
+        .first()
+    )
 
     if not user_with_profile:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Handle missing profile
+    # Handle missing profile data
     profile = user_with_profile.profile
     first_name = profile.first_name if profile and profile.first_name else "New"
     last_name = profile.last_name if profile and profile.last_name else "Teacher"
+    teacher_name = f"{first_name} {last_name}".strip()
 
     # Fetch classes assigned to this teacher
-    teacher_class_assignments = db.query(TeacherClass).filter(TeacherClass.teacher_id == current_user.id).all()
-    class_ids = [tc.class_id for tc in teacher_class_assignments]
+    teacher_class_assignments = (
+        db.query(TeacherClass)
+        .filter(TeacherClass.teacher_id == current_user.id)
+        .all()
+    )
+    assigned_class_ids = [tc.class_id for tc in teacher_class_assignments]
 
-    if not class_ids:
-        # No classes assigned, return all classes as available
+    if not assigned_class_ids:
+        # No assigned classes: return all classes as available
         all_classes = db.query(Class).options(joinedload(Class.school)).all()
         available_classes = [
             {
@@ -106,31 +121,40 @@ def teacher_dashboard(
             "announcements": [],
             "classes": [],
             "available_classes": available_classes,
-            "name": f"{first_name} {last_name}".strip(),
+            "name": teacher_name,
         }
 
-    # If the teacher has classes assigned, fetch them
-    classes = db.query(Class).filter(Class.id.in_(class_ids)).options(joinedload(Class.school)).all()
+    # Fetch assigned classes with their schools
+    assigned_classes = (
+        db.query(Class)
+        .filter(Class.id.in_(assigned_class_ids))
+        .options(joinedload(Class.school))
+        .all()
+    )
 
-    # Fetch announcements for these classes
-    announcements = fetch_announcements(db=db, class_ids=class_ids, recipient_id=current_user.id)
+    # Fetch announcements for assigned classes
+    announcements = fetch_announcements(
+        db=db, class_ids=assigned_class_ids, recipient_id=current_user.id
+    )
     serialized_announcements = serialize_announcements(announcements)
 
+    # Serialize assigned classes for response
     response_classes = [
         {
             "id": c.id,
             "class_name": c.name,
             "school_name": c.school.name,
         }
-        for c in classes
+        for c in assigned_classes
     ]
 
     return {
         "announcements": serialized_announcements,
         "classes": response_classes,
         "available_classes": [],
-        "name": f"{first_name} {last_name}".strip(),
+        "name": teacher_name,
     }
+
 
 
 

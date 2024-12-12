@@ -1,4 +1,3 @@
-<!-- TeacherDashboard.vue -->
 <template>
   <div class="bg-gray-100 dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
     <!-- Container matching Navbar -->
@@ -107,7 +106,7 @@
 </template>
 
 <script>
-import api from '../api';
+import api from '../api'; // Ensure this points to your Axios instance
 import AnnouncementList from '../components/AnnouncementList.vue';
 import ClassSelector from '../components/ClassSelector.vue';
 
@@ -129,40 +128,77 @@ export default {
       selectedClassId: '',
     };
   },
+  created() {
+    console.log('TeacherDashboard component created.');
+    this.initializeDashboard();
+  },
   methods: {
+    async initializeDashboard() {
+      try {
+        console.log('Initializing dashboard...');
+        await this.fetchDashboardData();
+        await this.fetchAnnouncements();
+        console.log('Dashboard initialized successfully.');
+      } catch (error) {
+        console.error('Error initializing dashboard:', error);
+        this.errorMessage = 'Failed to initialize dashboard. Please try again later.';
+      }
+    },
     async fetchDashboardData() {
       try {
-        // Fetch teacher dashboard data
+        console.log('Fetching teacher dashboard data...');
         const response = await api.get('/dashboard/teacher');
+        console.log('Dashboard data fetched:', response.data);
+
         this.teacherName = response.data.name || 'Teacher';
-        this.announcements = response.data.announcements || [];
-
-        // Use assigned classes for cards
         this.classes = response.data.classes || [];
-
-        // Fetch all available classes for dropdown
-        const availableClassesResponse = await api.get('/classes/unrestricted');
-        this.availableClasses = availableClassesResponse.data || [];
+        console.log('Classes updated:', this.classes);
+        this.availableClasses = response.data.available_classes || [];
+        console.log('Available classes updated:', this.availableClasses);
       } catch (error) {
-        console.error(error);
+        console.error('Error fetching dashboard data:', error);
         this.errorMessage = 'Failed to load dashboard data. Please try again later.';
       } finally {
         this.isLoading = false;
         this.isLoadingClasses = false;
       }
     },
+    async fetchAnnouncements() {
+      try {
+        const classIds = Array.isArray(this.classes) ? this.classes.map(c => c.id) : [];
+        console.log('Class IDs for fetching announcements:', classIds);
+
+        if (classIds.length === 0) {
+          this.announcements = [];
+          console.log('No classes found, skipping announcement fetch.');
+          return;
+        }
+
+        const params = new URLSearchParams();
+        classIds.forEach(id => params.append('class_ids', id));
+
+        console.log('Fetching announcements for classes:', classIds);
+        const response = await api.get(`/announcements?${params.toString()}`);
+        console.log('Raw response data:', response.data);
+
+        // Assign the list directly since the backend returns a list
+        this.announcements = response.data || [];
+        console.log('Announcements received and set:', this.announcements);
+      } catch (error) {
+        console.error('Error fetching announcements:', error);
+        this.errorMessage = 'Failed to load announcements. Please try again later.';
+      }
+    },
     goToCreateAnnouncement() {
       this.$router.push('/create-announcement');
     },
     async handleClassSelected(classId) {
-      console.log('Event received in TeacherDashboard with Class ID:', classId);
+      console.log('Class selected:', classId);
       try {
-        // Find the selected class in `availableClasses`
         const newClass = this.availableClasses.find(c => c.id === parseInt(classId));
         console.log('New Class Found:', newClass);
 
         if (newClass) {
-          // Add the new class to the `classes` array
           this.classes.push({
             id: newClass.id,
             class_name: newClass.class_name,
@@ -170,14 +206,14 @@ export default {
           });
           console.log('Updated classes array:', this.classes);
 
-          // Remove the class from `availableClasses`
           this.availableClasses = this.availableClasses.filter(c => c.id !== parseInt(classId));
           console.log('Updated availableClasses array:', this.availableClasses);
         } else {
           console.error('Class not found in availableClasses');
+          return;
         }
 
-        // Show alert only once here
+        await this.fetchAnnouncements();
         alert('Class successfully assigned!');
       } catch (error) {
         console.error('Error handling class assignment:', error);
@@ -186,33 +222,37 @@ export default {
     },
     async removeClassAssignment(classId) {
       try {
+        console.log(`Removing class assignment for Class ID: ${classId}`);
         await api.delete(`/teacher-class-assignments/${classId}`);
-        // Remove class from `classes`
+        console.log(`Deleted class assignment for Class ID: ${classId}`);
+
+        const removedClass = this.classes.find(c => c.id === classId);
         this.classes = this.classes.filter(c => c.id !== classId);
-        console.log('Removed class with ID:', classId);
+        console.log('Updated classes array after removal:', this.classes);
 
-        // Optionally, add it back to availableClasses
-        // Find the removed class details from the deleted class assignment
-        // This assumes you have the class details; otherwise, you might need to fetch them
-        // For simplicity, let's assume the backend returns the class details upon deletion
+        if (removedClass) {
+          this.availableClasses.push({
+            id: removedClass.id,
+            class_name: removedClass.class_name,
+            school_name: removedClass.school_name,
+          });
+          console.log('Added class back to availableClasses:', removedClass);
+        }
 
-        // If not, you might need to refetch or have another way to get the class details
-        // Here, we'll skip adding it back to `availableClasses` automatically
-
+        await this.fetchAnnouncements();
         alert('Class assignment removed successfully!');
       } catch (error) {
-        console.error('Error removing class:', error);
+        console.error('Error removing class assignment:', error);
         alert('Failed to remove class assignment. Please try again.');
       }
     },
     navigateToSelectedClass() {
       if (this.selectedClassId) {
         this.$router.push(`/classes/${this.selectedClassId}`);
+        this.selectedClassId = '';
+        console.log('Navigated to class:', this.selectedClassId);
       }
     },
-  },
-  created() {
-    this.fetchDashboardData();
   },
 };
 </script>

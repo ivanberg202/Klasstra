@@ -275,6 +275,34 @@ def assign_class_to_user(
     return {"detail": "Class assigned to user successfully."}
 
 
+@router.get("/teacher-classes", response_model=List[ClassResponse])
+def get_teacher_classes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retrieve all classes assigned to the logged-in teacher.
+    """
+    if current_user.role not in ["admin", "teacher"]:
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
+    # Base query: Join Class and School
+    query = db.query(
+        Class.id.label("id"),
+        Class.name.label("class_name"),
+        Class.school_id.label("school_id"),
+        School.name.label("school_name")
+    ).join(School, Class.school_id == School.id)
+
+    if current_user.role == "teacher":
+        # Join with TeacherClass to filter classes assigned to the current teacher
+        query = query.join(TeacherClass, TeacherClass.class_id == Class.id)\
+                     .filter(TeacherClass.teacher_id == current_user.id)
+
+    classes = query.all()
+
+    return classes
+
 
 @router.delete("/teacher-class-assignments/{class_id}", response_model=dict)
 def remove_class_assignment(
