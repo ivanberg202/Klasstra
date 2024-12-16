@@ -17,14 +17,14 @@ import secrets
 from app.utils.utils import send_email
 
 from app.database import get_db
-from app.models import User, UserProfile, Class, Student, ParentStudent, TeacherClass, ClassRepresentative
+from app.models import User, UserProfile, Class, Student, ParentStudent, ClassRepresentative
 from app.schemas.users import (
     UserCreate,
     UserResponse,
     UserProfileCreate,
     UserProfileResponse,
     StudentCreate,
-    TeacherClassAssignment
+    teacher_classAssignment
 )
 
 router = APIRouter()

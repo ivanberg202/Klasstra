@@ -6,7 +6,7 @@ from app.schemas.users import UserCreate, UserUpdate, UserResponse, StudentCreat
 from app.routers.auth import get_current_user, role_required
 import json
 from app.schemas.users import UserResponse
-from app.models import User, TeacherClass, ClassRepresentative
+from app.models import User, teacher_class, ClassRepresentative
 from app.schemas.users import UserResponse, UserProfileResponse
 
 router = APIRouter()

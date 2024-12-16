@@ -1,37 +1,24 @@
 <template>
   <div class="bg-gray-100 dark:bg-gray-900 min-h-screen text-gray-900 dark:text-gray-100">
-    <!-- Container matching Navbar -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="py-6">
-        <!-- Top Section: Welcome and Create Announcement -->
-        <div class="flex justify-between items-center mb-6">
-          <h1 class="text-2xl font-bold">Welcome, {{ teacherName }}!</h1>
-          <!-- Create Announcement Button -->
-          <button
-            @click="goToCreateAnnouncement"
-            class="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg focus:outline-none transition"
-          >
-            Create Announcement
-          </button>
-        </div>
+        <ErrorMessage :message="errorMessage" />
+        <LoadingIndicator v-if="isLoading" />
+        <template v-else>
+          <!-- Top Section: Welcome and Create Announcement -->
+          <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold">Welcome, {{ teacherName }}!</h1>
+            <button
+              @click="goToCreateAnnouncement"
+              class="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg focus:outline-none transition"
+            >
+              Create Announcement
+            </button>
+          </div>
 
-        <!-- Error Message -->
-        <div v-if="errorMessage" class="text-center text-red-500 dark:text-red-400 mb-4">
-          {{ errorMessage }}
-        </div>
-
-        <!-- Loading Indicator -->
-        <div v-if="isLoading" class="text-center text-gray-500 dark:text-gray-400">
-          Loading dashboard data...
-        </div>
-
-        <!-- Main Content -->
-        <div v-else>
           <!-- Classes Section -->
           <section>
             <h2 class="text-xl font-semibold mb-4">Your Classes</h2>
-
-            <!-- Existing Classes List -->
             <div v-if="classes && classes.length > 0" class="grid gap-4">
               <div
                 v-for="classItem in classes"
@@ -52,8 +39,6 @@
                 </button>
               </div>
             </div>
-
-            <!-- No Classes Message -->
             <div v-else class="flex flex-col items-center justify-center py-10">
               <p class="text-gray-500 dark:text-gray-400 mb-4">
                 No classes found. Please use the dropdown to select and add the classes you teach.
@@ -61,13 +46,13 @@
             </div>
           </section>
 
-          <!-- Classes Selection -->
+          <!-- Class Selector -->
           <div class="mt-6">
             <ClassSelector
               v-model:selectedClassId="selectedClassId"
               :classes="availableClasses"
               @class-assigned="handleClassSelected"
-              :isLoading="isLoadingClasses"
+              :isLoading="false"
             />
 
             <button
@@ -82,11 +67,7 @@
           <!-- Announcements Section -->
           <section class="mt-10">
             <h2 class="text-xl font-semibold mb-4">Announcements</h2>
-
-            <!-- Announcements List -->
             <AnnouncementList v-if="announcements && announcements.length > 0" :announcements="announcements" />
-
-            <!-- No Announcements Message -->
             <div v-else class="flex flex-col items-center justify-center py-10">
               <p class="text-gray-500 dark:text-gray-400 mb-4">
                 There are no announcements at the moment. Stay tuned for updates!
@@ -99,171 +80,152 @@
               </button>
             </div>
           </section>
-        </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import api from '../api'; // Ensure this points to your Axios instance
-import AnnouncementList from '../components/AnnouncementList.vue';
-import ClassSelector from '../components/ClassSelector.vue';
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useTeacherDashboard } from '../composables/useTeacherDashboard'
+import AnnouncementList from '../components/AnnouncementList.vue'
+import ClassSelector from '../components/ClassSelector.vue'
+import ErrorMessage from '../components/ErrorMessage.vue'
+import LoadingIndicator from '../components/LoadingIndicator.vue'
+import api from '../api'
 
 export default {
   name: 'TeacherDashboard',
   components: {
     AnnouncementList,
     ClassSelector,
+    ErrorMessage,
+    LoadingIndicator,
   },
-  data() {
-    return {
-      teacherName: '',
-      classes: [],
-      availableClasses: [],
-      announcements: [],
-      isLoading: true,
-      isLoadingClasses: true,
-      errorMessage: '',
-      selectedClassId: '',
-    };
-  },
-  created() {
-    console.log('TeacherDashboard component created.');
-    this.initializeDashboard();
-  },
-  methods: {
-    async initializeDashboard() {
-      try {
-        console.log('Initializing dashboard...');
-        await this.fetchDashboardData();
-        await this.fetchAnnouncements();
-        console.log('Dashboard initialized successfully.');
-      } catch (error) {
-        console.error('Error initializing dashboard:', error);
-        this.errorMessage = 'Failed to initialize dashboard. Please try again later.';
-      }
-    },
-    async fetchDashboardData() {
-      try {
-        console.log('Fetching teacher dashboard data...');
-        const response = await api.get('/dashboard/teacher');
-        console.log('Dashboard data fetched:', response.data);
+  setup() {
+    const {
+      teacherName,
+      classes,
+      availableClasses,
+      announcements,
+      isLoading,
+      errorMessage,
+      fetchDashboardData,
+      fetchAnnouncements,
+    } = useTeacherDashboard()
 
-        this.teacherName = response.data.name || 'Teacher';
-        this.classes = response.data.classes || [];
-        console.log('Classes updated:', this.classes);
-        this.availableClasses = response.data.available_classes || [];
-        console.log('Available classes updated:', this.availableClasses);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        this.errorMessage = 'Failed to load dashboard data. Please try again later.';
-      } finally {
-        this.isLoading = false;
-        this.isLoadingClasses = false;
-      }
-    },
-    async fetchAnnouncements() {
-      try {
-        const classIds = Array.isArray(this.classes) ? this.classes.map(c => c.id) : [];
-        console.log('Class IDs for fetching announcements:', classIds);
+    const selectedClassId = ref('')
+    const router = useRouter()
+    const isProcessing = ref(false)
 
-        if (classIds.length === 0) {
-          this.announcements = [];
-          console.log('No classes found, skipping announcement fetch.');
-          return;
-        }
-
-        const params = new URLSearchParams();
-        classIds.forEach(id => params.append('class_ids', id));
-
-        console.log('Fetching announcements for classes:', classIds);
-        const response = await api.get(`/announcements?${params.toString()}`);
-        console.log('Raw response data:', response.data);
-
-        // Assign the list directly since the backend returns a list
-        this.announcements = response.data || [];
-        console.log('Announcements received and set:', this.announcements);
-      } catch (error) {
-        console.error('Error fetching announcements:', error);
-        this.errorMessage = 'Failed to load announcements. Please try again later.';
-      }
-    },
-    goToCreateAnnouncement() {
-      this.$router.push('/create-announcement');
-    },
-    async handleClassSelected(classId) {
-      console.log('Class selected:', classId);
-      try {
-        const newClass = this.availableClasses.find(c => c.id === parseInt(classId));
-        console.log('New Class Found:', newClass);
-
-        if (newClass) {
-          this.classes.push({
-            id: newClass.id,
-            class_name: newClass.class_name,
-            school_name: newClass.school_name,
-          });
-          console.log('Updated classes array:', this.classes);
-
-          this.availableClasses = this.availableClasses.filter(c => c.id !== parseInt(classId));
-          console.log('Updated availableClasses array:', this.availableClasses);
+    function handleApiError(error, actionDescription) {
+      console.error(`${actionDescription} failed:`, error)
+      if (error.response) {
+        if (error.response.status === 401) {
+          alert('Unauthorized. Please log in again.')
+          router.push('/login')
+        } else if (error.response.status === 404) {
+          alert('Resource not found.')
         } else {
-          console.error('Class not found in availableClasses');
-          return;
+          alert(`Error: ${error.response.data?.detail || 'Something went wrong. Please try again.'}`)
+        }
+      } else {
+        alert('Network error. Please check your internet connection.')
+      }
+    }
+
+    async function handleClassSelected(classId) {
+      if (isProcessing.value) return
+      isProcessing.value = true
+      try {
+        const newClass = availableClasses.value.find(c => c.id === parseInt(classId))
+        if (!newClass) {
+          alert('Class not found in available classes.')
+          return
         }
 
-        await this.fetchAnnouncements();
-        alert('Class successfully assigned!');
-      } catch (error) {
-        console.error('Error handling class assignment:', error);
-        alert('Failed to assign class. Please try again.');
-      }
-    },
-    async removeClassAssignment(classId) {
-      try {
-        console.log(`Removing class assignment for Class ID: ${classId}`);
-        await api.delete(`/teacher-class-assignments/${classId}`);
-        console.log(`Deleted class assignment for Class ID: ${classId}`);
+        // Assign the class to the teacher via API
+        await api.post('/teacher-class-assignments', { class_id: parseInt(classId) })
 
-        const removedClass = this.classes.find(c => c.id === classId);
-        this.classes = this.classes.filter(c => c.id !== classId);
-        console.log('Updated classes array after removal:', this.classes);
+        // Update local state
+        classes.value.push(newClass)
+        availableClasses.value = availableClasses.value.filter(c => c.id !== parseInt(classId))
+
+        // Fetch announcements again since the class list changed
+        await fetchAnnouncements()
+        alert('Class successfully assigned!')
+      } catch (error) {
+        handleApiError(error, 'Assigning class')
+      } finally {
+        isProcessing.value = false
+      }
+    }
+
+    async function removeClassAssignment(classId) {
+      if (isProcessing.value) return
+      isProcessing.value = true
+      try {
+        await api.delete(`/teacher-class-assignments/${classId}`)
+        const removedClass = classes.value.find(c => c.id === classId)
+        classes.value = classes.value.filter(c => c.id !== classId)
 
         if (removedClass) {
-          this.availableClasses.push({
-            id: removedClass.id,
-            class_name: removedClass.class_name,
-            school_name: removedClass.school_name,
-          });
-          console.log('Added class back to availableClasses:', removedClass);
+          availableClasses.value.push(removedClass)
         }
 
-        await this.fetchAnnouncements();
-        alert('Class assignment removed successfully!');
+        await fetchAnnouncements()
+        alert('Class assignment removed successfully!')
       } catch (error) {
-        console.error('Error removing class assignment:', error);
-        alert('Failed to remove class assignment. Please try again.');
+        handleApiError(error, 'Removing class assignment')
+      } finally {
+        isProcessing.value = false
       }
-    },
-    navigateToSelectedClass() {
-      if (this.selectedClassId) {
-        this.$router.push(`/classes/${this.selectedClassId}`);
-        this.selectedClassId = '';
-        console.log('Navigated to class:', this.selectedClassId);
-      }
-    },
-  },
-};
-</script>
+    }
 
-<style scoped>
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.3s;
+    function navigateToSelectedClass() {
+      if (selectedClassId.value) {
+        router.push(`/classes/${selectedClassId.value}`)
+        selectedClassId.value = ''
+      }
+    }
+
+    function goToCreateAnnouncement() {
+      router.push('/create-announcement')
+    }
+
+    onMounted(async () => {
+      console.log('TeacherDashboard mounted, checking token...')
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        console.error('No token found. Redirecting to login.')
+        router.push('/login')
+        return
+      }
+
+      console.log('Token found, fetching teacher dashboard data...')
+      try {
+        await fetchDashboardData()
+        await fetchAnnouncements()
+      } catch (error) {
+        handleApiError(error, 'Fetching teacher dashboard data')
+      }
+    })
+
+    return {
+      teacherName,
+      classes,
+      availableClasses,
+      announcements,
+      isLoading,
+      errorMessage,
+      selectedClassId,
+      handleClassSelected,
+      removeClassAssignment,
+      navigateToSelectedClass,
+      goToCreateAnnouncement,
+    }
+  },
 }
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-</style>
+</script>

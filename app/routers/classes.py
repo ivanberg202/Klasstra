@@ -2,12 +2,13 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
 from typing import List
 
 from app.database import get_db
-from app.models import Class, User, TeacherClass, Student, ParentStudent, ClassRepresentative, School
+from app.models import Class, User, teacher_class, Student, ParentStudent, ClassRepresentative, School
 from app.schemas.classes import ClassCreate, ClassResponse, ClassAssignmentRequest
-from app.schemas.users import TeacherClassAssignment
+from app.schemas.users import teacher_classAssignment
 from app.routers.auth import role_required, get_current_user
 
 router = APIRouter()
@@ -46,7 +47,6 @@ def get_unrestricted_classes(
     ]
 
 
-
 @router.get('/classes/all', response_model=List[ClassResponse])
 def get_all_classes(
     db: Session = Depends(get_db),
@@ -70,8 +70,8 @@ def get_all_classes(
         # Teachers see only classes they are assigned to
         classes = (
             db.query(Class)
-            .join(TeacherClass, TeacherClass.class_id == Class.id)
-            .filter(TeacherClass.teacher_id == user.id)
+            .join(teacher_class, teacher_class.c.class_id == Class.id)
+            .filter(teacher_class.c.teacher_id == user.id)
             .options(joinedload(Class.school))
             .all()
         )
@@ -100,7 +100,7 @@ def get_all_classes(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to access this resource."
         )
-    
+
     # Transform results to match the expected response schema
     return [
         {
@@ -158,9 +158,9 @@ def get_class(class_id: int, db: Session = Depends(get_db), current_user: User =
     
     # If user is a teacher, verify assignment
     if current_user.role == 'teacher':
-        assignment = db.query(TeacherClass).filter(
-            TeacherClass.teacher_id == current_user.id,
-            TeacherClass.class_id == class_id
+        assignment = db.query(teacher_class).filter(
+            teacher_class.c.teacher_id == current_user.id,  # Corrected to use .c
+            teacher_class.c.class_id == class_id
         ).first()
         if not assignment:
             raise HTTPException(status_code=403, detail="You do not have access to this class")
@@ -186,9 +186,9 @@ def update_class(class_id: int, class_data: ClassCreate, db: Session = Depends(g
     
     # If user is a teacher, verify assignment
     if current_user.role == 'teacher':
-        assignment = db.query(TeacherClass).filter(
-            TeacherClass.teacher_id == current_user.id,
-            TeacherClass.class_id == class_id
+        assignment = db.query(teacher_class).filter(
+            teacher_class.c.teacher_id == current_user.id,  # Corrected to use .c
+            teacher_class.c.class_id == class_id
         ).first()
         if not assignment:
             raise HTTPException(status_code=403, detail="You do not have permission to update this class")
@@ -224,9 +224,9 @@ def delete_class(class_id: int, db: Session = Depends(get_db), current_user: Use
     
     # If user is a teacher, verify assignment
     if current_user.role == 'teacher':
-        assignment = db.query(TeacherClass).filter(
-            TeacherClass.teacher_id == current_user.id,
-            TeacherClass.class_id == class_id
+        assignment = db.query(teacher_class).filter(
+            teacher_class.c.teacher_id == current_user.id,  # Corrected to use .c
+            teacher_class.c.class_id == class_id
         ).first()
         if not assignment:
             raise HTTPException(status_code=403, detail="You do not have permission to delete this class")
@@ -236,7 +236,6 @@ def delete_class(class_id: int, db: Session = Depends(get_db), current_user: Use
     db.commit()
     
     return {"message": "Class deleted successfully"}
-
 
 
 @router.post("/teacher-class-assignments", response_model=dict)
@@ -258,20 +257,44 @@ def assign_class_to_user(
     if current_user.role not in ["admin", "teacher"]:
         raise HTTPException(status_code=403, detail="Access forbidden")
 
+    # If Admin is assigning to another user, the request should include `user_id`
+    # Assuming `ClassAssignmentRequest` includes `user_id` when role is admin
+    # Modify accordingly if not
+
+    # For simplicity, here we assume teachers can only assign themselves
+    # Admins can assign to any user by providing `user_id` in the request
+    if current_user.role == "admin":
+        if hasattr(request, 'user_id') and request.user_id:
+            user_id = request.user_id
+        else:
+            raise HTTPException(status_code=400, detail="Admin must provide `user_id` to assign class")
+
+    # Check if the user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Check if the class exists
+    class_instance = db.query(Class).filter(Class.id == class_id).first()
+    if not class_instance:
+        raise HTTPException(status_code=404, detail="Class not found")
+
     # Check if the assignment already exists
-    existing = db.query(TeacherClass).filter(
-        TeacherClass.teacher_id == user_id,  # Use user_id here
-        TeacherClass.class_id == class_id
+    existing = db.query(teacher_class).filter(
+        teacher_class.c.teacher_id == user_id,  # Corrected to use .c
+        teacher_class.c.class_id == class_id
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Class is already assigned to the user")
 
     # Create the new assignment
-    new_assignment = TeacherClass(teacher_id=user_id, class_id=class_id)
-    db.add(new_assignment)
+    insert_stmt = teacher_class.insert().values(
+        teacher_id=user_id,
+        class_id=class_id,
+    )
+    db.execute(insert_stmt)
     db.commit()
-    db.refresh(new_assignment)
-    
+
     return {"detail": "Class assigned to user successfully."}
 
 
@@ -295,9 +318,9 @@ def get_teacher_classes(
     ).join(School, Class.school_id == School.id)
 
     if current_user.role == "teacher":
-        # Join with TeacherClass to filter classes assigned to the current teacher
-        query = query.join(TeacherClass, TeacherClass.class_id == Class.id)\
-                     .filter(TeacherClass.teacher_id == current_user.id)
+        # Join with teacher_class to filter classes assigned to the current teacher
+        query = query.join(teacher_class, teacher_class.c.class_id == Class.id)\
+                     .filter(teacher_class.c.teacher_id == current_user.id)
 
     classes = query.all()
 
@@ -319,16 +342,24 @@ def remove_class_assignment(
     if current_user.role not in ["admin", "teacher"]:
         raise HTTPException(status_code=403, detail="Access forbidden")
 
+    # If Admin is removing assignment from another user, handle accordingly
+    # Assuming only teachers can remove their own assignments in this endpoint
+    # Modify if admins need to remove assignments from others
+
     # Check if the assignment exists
-    existing = db.query(TeacherClass).filter(
-        TeacherClass.teacher_id == user_id,
-        TeacherClass.class_id == class_id
+    existing = db.query(teacher_class).filter(
+        teacher_class.c.teacher_id == user_id,  # Corrected to use .c
+        teacher_class.c.class_id == class_id
     ).first()
     if not existing:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     # Remove the assignment
-    db.delete(existing)
+    delete_stmt = teacher_class.delete().where(
+        teacher_class.c.teacher_id == user_id,
+        teacher_class.c.class_id == class_id
+    )
+    db.execute(delete_stmt)
     db.commit()
 
     return {"detail": "Class removed from user successfully."}

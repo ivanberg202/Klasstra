@@ -64,7 +64,7 @@ class ParentStudentResponse(BaseModel):
 # ------------------------------
 # Teacher-class assignment schema
 # ------------------------------
-class TeacherClassAssignment(BaseModel):
+class teacher_classAssignment(BaseModel):
     teacher_id: int
     class_id: int
 

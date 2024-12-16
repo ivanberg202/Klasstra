@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import Base, engine
-from app.models import User, School, Class, Student, ParentStudent, TeacherClass, ClassRepresentative, Announcement
+from app.models import User, School, Class, Student, ParentStudent, ClassRepresentative, Announcement, teacher_class
 from app.routers import auth, announcements, classes, schools, users, dashboards
 import os
 import logging
